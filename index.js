@@ -69,9 +69,21 @@ async function run() {
 
     app.get('/requests/:email', async (req, res) => {
       const email = req.params.email;
+      const { limit, skip, filter } = req.query
       const query = { email }
-      const result = await requestcollection.findOne(query)
-      res.send(result)
+      if (filter && filter !== 'all') {
+        query.status = filter;
+      }
+      const sorting = { sort: { createdAt: -1 } }
+      const cursor = requestcollection.find(query, sorting)
+        .limit(Number(limit)).skip(Number(skip));
+      const result = await cursor.toArray()
+      const totalCount = await requestcollection.countDocuments(query);
+      // res.send(result)
+      res.send({
+        data: result,
+        totalCount
+      })
     })
 
     // Send a ping to confirm a successful connection
