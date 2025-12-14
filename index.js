@@ -66,6 +66,7 @@ async function run() {
     app.post('/users', async (req, res) => {
       const donor = req.body
       donor.role = "donor"
+      donor.status = "active"
       donor.createdAt = new Date()
       const result = await usercollection.insertOne(donor)
       res.send(result)
@@ -81,7 +82,21 @@ async function run() {
       res.send({ role: user?.role || "user" })
       //user thakle role pathai diba noile 'user' pathaba
     })
-    app.get('/allusers', verifytoken,verifyadmin, async (req, res) => {
+    app.get('/allusers', verifytoken, verifyadmin, async (req, res) => {
+      const query = {}
+      const { limit, skip, filter } = req.query
+      if (filter && filter != "all") {
+        query.status = filter
+      }
+      const cursor = usercollection.find(query).limit(Number(limit)).skip(Number(skip))
+      const result = await cursor.toArray()
+      const totalCount = await usercollection.countDocuments(query)
+      res.send({
+        data: result,
+        totalCount
+      })
+    })
+    app.get('/allusersforvolunteer', verifytoken, async (req, res) => {
       const query = {}
       const { limit, skip, filter } = req.query
       if (filter && filter != "all") {
@@ -153,7 +168,24 @@ async function run() {
       const result = await requestcollection.insertOne(donor)
       res.send(result)
     })
-    app.get('/allrequests', verifytoken,verifyadmin, async (req, res) => {
+    app.get('/allrequests', verifytoken, verifyadmin, async (req, res) => {
+      const query = {}
+      const { limit, skip, filter } = req.query
+      if (filter && filter !== 'all') {
+        query.status = filter;
+      }
+      const sorting = { sort: { createdAt: -1 } }
+      const cursor = requestcollection.find(query, sorting)
+        .limit(Number(limit)).skip(Number(skip));
+      const result = await cursor.toArray()
+      const totalCount = await requestcollection.countDocuments(query);
+      // res.send(result)
+      res.send({
+        data: result,
+        totalCount
+      })
+    })
+    app.get('/allrequestsforvolunteer', verifytoken, async (req, res) => {
       const query = {}
       const { limit, skip, filter } = req.query
       if (filter && filter !== 'all') {
