@@ -40,12 +40,27 @@ async function run() {
       res.send({ role: user?.role || "user" })
       //user thakle role pathai diba noile 'user' pathaba
     })
+    app.get('/allusers', async (req, res) => {
+      const query = {}
+      const { limit, skip, filter } = req.query
+      if (filter && filter != "all") {
+        query.status = filter
+      }
+      const cursor = usercollection.find(query).limit(Number(limit)).skip(Number(skip))
+      const result = await cursor.toArray()
+      const totalCount = await usercollection.countDocuments(query)
+      res.send({
+        data: result,
+        totalCount
+      })
+    })
     app.get('/users/:email', async (req, res) => {
       const email = req.params.email;
       const query = { email }
       const result = await usercollection.findOne(query)
       res.send(result)
     })
+
     app.patch('/users/:email', async (req, res) => {
       const email = req.params.email
       const query = { email }
@@ -59,12 +74,54 @@ async function run() {
       const result = await usercollection.updateOne(query, { $set: updateData })
       res.send(result)
     })
+    app.patch('/userstatus/:id', async (req, res) => {
+      const id = req.params.id
+      const statusupdate = req.body
+      const query = { _id: new ObjectId(id) }
+
+      const update = {
+        $set: {
+          status: statusupdate.status
+        }
+      }
+      const result = await usercollection.updateOne(query, update)
+      res.send(result)
+    })
+    app.patch('/userrole/:id', async (req, res) => {
+      const id = req.params.id
+      const roleupdate = req.body
+      const query = { _id: new ObjectId(id) }
+      const update = {
+        $set: {
+          role: roleupdate.role
+        }
+      }
+      const result = await usercollection.updateOne(query, update)
+      res.send(result)
+    })
     app.post('/requests', async (req, res) => {
       const donor = req.body
       donor.status = "pending"
       donor.createdAt = new Date()
       const result = await requestcollection.insertOne(donor)
       res.send(result)
+    })
+    app.get('/allrequests', async (req, res) => {
+       const query = { }
+       const { limit, skip, filter } = req.query
+      if (filter && filter !== 'all') {
+        query.status = filter;
+      }
+      const sorting = { sort: { createdAt: -1 } }
+      const cursor = requestcollection.find(query, sorting)
+        .limit(Number(limit)).skip(Number(skip));
+      const result = await cursor.toArray()
+      const totalCount = await requestcollection.countDocuments(query);
+      // res.send(result)
+      res.send({
+        data: result,
+        totalCount
+      })
     })
     app.get('/requests/details/:id', async (req, res) => {
       const id = req.params.id;
