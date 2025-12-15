@@ -185,6 +185,23 @@ async function run() {
         totalCount
       })
     })
+    app.get('/public/allrequests', async (req, res) => {
+      const query = {}
+      const { limit, skip, filter } = req.query
+      if (filter) {
+        query.status = filter;
+      }
+      const sorting = { sort: { createdAt: -1 } }
+      const cursor = requestcollection.find(query, sorting)
+        .limit(Number(limit)).skip(Number(skip));
+      const result = await cursor.toArray()
+      const totalCount = await requestcollection.countDocuments(query);
+      // res.send(result)
+      res.send({
+        data: result,
+        totalCount
+      })
+    })
     app.get('/allrequestsforvolunteer', verifytoken, async (req, res) => {
       const query = {}
       const { limit, skip, filter } = req.query
