@@ -119,7 +119,30 @@ async function run() {
       const result = await usercollection.findOne(query)
       res.send(result)
     })
-
+    app.get('/searchusers', async (req, res) => {
+      // const id = req.params.id
+      const query = {}
+      const { limit, skip, filterbydivision, filterbydistrict, filterbygroup } = req.query
+      if (filterbydivision == "Pick a division" && filterbydistrict == "Pick a district" && filterbygroup == "Select your blood group") {
+        return res.send({ message: 'find specific something' })
+      }
+      if (filterbydivision && filterbydivision !== "Pick a division" && filterbydivision !== "") {
+        query.divisions = filterbydivision
+      }
+      if (filterbydistrict && filterbydistrict !== "Pick a district" && filterbydistrict !== "") {
+        query.district = filterbydistrict
+      }
+      if (filterbygroup && filterbygroup !== "Select your blood group" && filterbygroup !== "") {
+        query.bloodgroup = filterbygroup
+      }
+      const cursor = usercollection.find(query).limit(Number(limit)).skip(Number(skip))
+      const result = await cursor.toArray()
+      const totalCount = await usercollection.countDocuments(query)
+      res.send({
+        data: result,
+        totalCount
+      })
+    })
     app.patch('/users/:email', verifytoken, async (req, res) => {
       const email = req.params.email
       const query = { email }
