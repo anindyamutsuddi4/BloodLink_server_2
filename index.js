@@ -4,6 +4,7 @@ const app = express()
 require('dotenv').config()
 const port = process.env.PORT || 3000
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const admin = require("firebase-admin");
 
 const serviceAccount = require("./bloodlink-1676e-firebase-adminsdk-fbsvc-89d5065ae7.json");
@@ -63,6 +64,46 @@ async function run() {
       }
       next()
     }
+    app.post('/create-checkout-session', async (req, res) => {
+      const paymentinfo = req.body
+      const amount = parseInt(paymentinfo.cost) * 100
+      if (!amount || isNaN(amount)) {
+        return res.status(400).send({ message: "Invalid cost" })
+      }
+      if (!paymentinfo.senderEmail) {
+        return res.status(400).send({ message: "Email required" })
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            // Provide the exact Price ID (for example, price_1234) of the product you want to sell
+            price_data: {
+              currency: 'usd',
+              unit_amount: amount,
+              product_data: {
+                name: "funding contribution",
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        customer_email: paymentinfo.senderEmail,//extra
+        mode: 'payment',
+        // metadata: {
+        //     parcelId: paymentinfo.id,
+        //     parcelName: paymentinfo.parcelName
+        // },
+        success_url:
+          //nijera ekta sessionid generate kore dicche ,jeta pore oi email r jonno,
+          //paymentstatus valid kina check korte help korbe
+          `${process.env.SITE_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        //env theke ekhane set kore dite hobe
+        cancel_url: `${process.env.SITE_DOMAIN}/payment-cancelled`
+      });
+      //console.log(session)
+      res.send({ url: session.url })
+    });
     app.post('/users', async (req, res) => {
       const donor = req.body
       donor.role = "donor"
