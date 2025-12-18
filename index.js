@@ -54,6 +54,7 @@ async function run() {
     const db = client.db('BloodLink')
     const usercollection = db.collection('users')
     const requestcollection = db.collection('requests')
+    const paymenthistory = db.collection('payments')
 
     const verifyadmin = async (req, res, next) => {
       const email = req.decoded_email//verifytoken middleware theke ei email ta pabo
@@ -64,7 +65,7 @@ async function run() {
       }
       next()
     }
-    app.post('/create-checkout-session', async (req, res) => {
+    app.post('/create-checkout-session', verifytoken, async (req, res) => {
       const paymentinfo = req.body
       const amount = parseInt(paymentinfo.cost) * 100
       if (!amount || isNaN(amount)) {
@@ -104,6 +105,59 @@ async function run() {
       //console.log(session)
       res.send({ url: session.url })
     });
+    app.post('/payment-success', verifytoken, async (req, res) => {
+      const id = req.query.session_id
+      const session = await stripe.checkout.sessions.retrieve(id)
+      //checking if a payment is added twice
+      const transactionId = session.payment_intent
+      const query = { transactionId: transactionId }
+      const paymentexist = await paymenthistory.findOne(query)
+      if (paymentexist) {
+        return res.send({
+          message: 'already exists',
+          //trackingid,transaction id send korte hobe,noile ui te dekhabe na,
+          //frontend e ei duita jinnish expect korche,so amadrke pathate hobe
+          trackingId: paymentexist.trackingId,
+          transactionId: transactionId
+
+        }
+        )
+      }
+
+      if (session.payment_status == "paid") {
+        const session = await stripe.checkout.sessions.retrieve(req.query.session_id, {
+          expand: ['line_items']
+        });
+        const totalAmount = session.amount_total;
+        //console.log(totalAmount / 100);
+        const bill = {}
+        bill.transactionId = transactionId
+        bill.cost = totalAmount / 100
+        bill.session = id
+        bill.email = session.customer_email
+        bill.date = new Date()
+        const result = await paymenthistory.insertOne(bill)
+        res.send({
+          success: true,//client k reponse pathacchi
+          paymentinfo: result,
+          transactionId: session.payment_intent
+        })
+
+
+        // const paymentdata = {
+        //   amount: session.amount_total / 100,
+        //   currency: session.currency,
+        //   customeremail: session.customer_email,
+        //   transactionId: session.payment_intent,
+        //   paidAt: new Date(),
+        //   trackingId: trackingId
+        // }
+
+        // const paymentres = await paymenthistory.insertOne(paymentdata)
+
+        //res.send(result)
+      }
+    })
     app.post('/users', async (req, res) => {
       const donor = req.body
       donor.role = "donor"
