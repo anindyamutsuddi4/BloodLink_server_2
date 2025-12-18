@@ -55,7 +55,6 @@ async function run() {
     const usercollection = db.collection('users')
     const requestcollection = db.collection('requests')
     const paymenthistory = db.collection('payments')
-
     const verifyadmin = async (req, res, next) => {
       const email = req.decoded_email//verifytoken middleware theke ei email ta pabo
       const query = { email }
@@ -102,32 +101,37 @@ async function run() {
         //env theke ekhane set kore dite hobe
         cancel_url: `${process.env.SITE_DOMAIN}/payment-cancelled`
       });
+
       //console.log(session)
       res.send({ url: session.url })
     });
-    app.post('/payment-success', verifytoken, async (req, res) => {
-      const id = req.query.session_id
-      const session = await stripe.checkout.sessions.retrieve(id)
-      //checking if a payment is added twice
-      const transactionId = session.payment_intent
-      const query = { transactionId: transactionId }
-      const paymentexist = await paymenthistory.findOne(query)
-      if (paymentexist) {
-        return res.send({
-          message: 'already exists',
-          //trackingid,transaction id send korte hobe,noile ui te dekhabe na,
-          //frontend e ei duita jinnish expect korche,so amadrke pathate hobe
-          trackingId: paymentexist.trackingId,
-          transactionId: transactionId
 
-        }
-        )
-      }
-
-      if (session.payment_status == "paid") {
+    app.post('/payment-success', async (req, res) => {
+      try {
+        const id = req.query.session_id
         const session = await stripe.checkout.sessions.retrieve(req.query.session_id, {
           expand: ['line_items']
         });
+        //checking if a payment is added twice
+        const transactionId = session.payment_intent
+        const query = { transactionId: transactionId }
+        const paymentexist = await paymenthistory.findOne(query)
+        if (paymentexist) {
+          return res.send({
+            message: 'already exists',
+            //trackingid,transaction id send korte hobe,noile ui te dekhabe na,
+            //frontend e ei duita jinnish expect korche,so amadrke pathate hobe
+            transactionId: transactionId
+
+          }
+          )
+        }
+
+        // if (session.payment_status == "paid") {
+
+        if (session.payment_status !== 'paid') {
+          return res.status(400).send({ message: 'Payment not completed' });
+        }
         const totalAmount = session.amount_total;
         //console.log(totalAmount / 100);
         const bill = {}
@@ -136,27 +140,54 @@ async function run() {
         bill.session = id
         bill.email = session.customer_email
         bill.date = new Date()
-        const result = await paymenthistory.insertOne(bill)
-        res.send({
-          success: true,//client k reponse pathacchi
-          paymentinfo: result,
-          transactionId: session.payment_intent
-        })
+        try {
+          const result = await paymenthistory.insertOne(bill)
+          res.send({
+            success: true,//client k reponse pathacchi
+            paymentinfo: result,
+            transactionId: session.payment_intent
+          })
 
 
-        // const paymentdata = {
-        //   amount: session.amount_total / 100,
-        //   currency: session.currency,
-        //   customeremail: session.customer_email,
-        //   transactionId: session.payment_intent,
-        //   paidAt: new Date(),
-        //   trackingId: trackingId
-        // }
-
-        // const paymentres = await paymenthistory.insertOne(paymentdata)
-
-        //res.send(result)
+        } catch (err) {
+          if (err.code === 11000) { // Duplicate key error
+            return res.send({
+              message: 'already exists',
+              transactionId: transactionId
+            });
+          }
+          throw err; // unexpected error
+        }
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: 'Internal server error' });
       }
+    });
+    app.get('/allpayments', verifytoken, async (req, res) => {
+      const query = {}
+      const { limit, skip } = req.query
+      const cursor = paymenthistory.find(query).limit(Number(limit)).skip(Number(skip)).sort({ date: -1 })  
+      const result = await cursor.toArray()
+      const totalCount = await paymenthistory.countDocuments(query)
+      res.send({
+        data: result,
+        totalCount
+      })
+    })
+    app.get('/payments/:email', verifytoken, async (req, res) => {
+      const email = req.params.email;
+      const { limit, skip } = req.query
+      const query = { email }
+      if (email !== req.decoded_email) {
+        return res.status(403).send({ message: "forbidden access" })
+      }
+      const cursor = paymenthistory.find(query).limit(Number(limit)).skip(Number(skip)).sort({ date: -1 })  
+      const result = await cursor.toArray()
+      const totalCount = await paymenthistory.countDocuments(query)
+      res.send({
+        data: result,
+        totalCount
+      })
     })
     app.post('/users', async (req, res) => {
       const donor = req.body
